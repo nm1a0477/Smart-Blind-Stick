@@ -1,0 +1,88 @@
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <NewPing.h>
+
+// Blynk Credentials
+#define BLYNK_TEMPLATE_ID "TMPL3kEQZ4Do2"
+#define BLYNK_TEMPLATE_NAME "Blind Stick"
+#define BLYNK_AUTH_TOKEN "ZGi3L9uOUcbymH9d_1FfqlW3xeFwuC8g"
+
+const char* ssid = "Infinix NOTE 40X 5G";           
+const char* pass = "mouni@123";
+
+// Pin Definitions
+#define TRIGGER_PIN  D5       // Ultrasonic Trigger
+#define ECHO_PIN     D6       // Ultrasonic Echo
+#define MAX_DISTANCE 300      // Max distance in cm
+
+#define buzzerPin     D2      // Buzzer
+#define ledPin        D1      // LED
+#define piezoPin      A0      // Piezo Vibration Sensor
+
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);
+
+// Blynk app LED control (V6)
+BLYNK_WRITE(V6) {
+  int ledState = param.asInt();         // 0 = OFF, 1 = ON
+  digitalWrite(ledPin, ledState);
+}
+
+void setup() {
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+  pinMode(piezoPin, INPUT);
+
+  Serial.begin(9600);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, "blynk.cloud", 80);
+
+  Serial.println("Smart Blind Stick - System Initialized");
+}
+
+void loop() {
+  Blynk.run();
+
+  int distance = sonar.ping_cm();         // Ultrasonic reading
+  int vibration = analogRead(piezoPin);   // Piezo sensor reading
+
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
+  Serial.print("Vibration: ");
+  Serial.println(vibration);
+
+  // Send sensor data to Blynk App
+  Blynk.virtualWrite(V1, distance);   // Distance display
+  Blynk.virtualWrite(V2, vibration);  // Vibration display
+
+  // Obstacle Detection
+  if (distance > 0 && distance < 60) {
+    tone(buzzerPin, 1000);               // Buzzer ON
+    digitalWrite(ledPin, HIGH);          // LED ON
+    Blynk.virtualWrite(V3, "Obstacle Ahead!");
+    Blynk.virtualWrite(V4, "ALERT: Danger Zone");
+    Serial.println("Obstacle detected! Alerts ON");
+  } else {
+    noTone(buzzerPin);                   // Buzzer OFF
+    digitalWrite(ledPin, LOW);           // LED OFF
+    Blynk.virtualWrite(V3, "No obstacle");
+    Blynk.virtualWrite(V4, "Safe Zone");
+    Serial.println("Path is clear. Alerts OFF");
+  }
+
+  // Piezo Vibration (Fall Detection)
+  if (vibration > 10) {
+    tone(buzzerPin, 1000);
+    delay(100);
+    noTone(buzzerPin);
+    delay(100);
+    Serial.println("Sudden vibration detected!");
+    Blynk.virtualWrite(V5, "Stick hit or fallen!");
+  } else {
+    Serial.println("No sudden vibration detected.");
+    Blynk.virtualWrite(V5, "No sudden vibration detected.");
+  }
+
+  delay(300);  // Delay before next reading
+}
